@@ -11,8 +11,14 @@ package dfslib
 import (
 	"fmt"
 	"os"
+	"path"
 	"regexp"
+	"strconv"
 )
+
+// -----------------------------------------------------------------------------
+
+// Define types.
 
 // A Chunk is the unit of reading/writing in DFS.
 type Chunk [32]byte
@@ -30,6 +36,8 @@ const (
 	// Disconnected read mode.
 	DREAD
 )
+
+// -----------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // <ERROR DEFINITIONS>
@@ -188,13 +196,6 @@ func MountDFS(serverAddr string, localIP string, localPath string) (dfs DFS, err
 	return nil, LocalPathError(localPath)
 }
 
-type DFSFileImpl struct {
-}
-
-type DFSImpl struct {
-	LocalPath string
-}
-
 // -----------------------------------------------------------------------------
 
 // Helper functions.
@@ -208,6 +209,7 @@ func CheckFilename(fname string) (ok bool) {
 		return false
 	}
 	filenameChecker := regexp.MustCompile("^[a-z0-9]+$").MatchString
+
 	return filenameChecker(fname)
 
 }
@@ -222,8 +224,102 @@ func CreateFile(fullPath string) (err error) {
 		if err != nil {
 			return LocalPathError(fullPath)
 		}
+		f.Close()
 	}
-	f.Close()
+
+	return nil
+
+}
+
+// Returns the ID from a past connection to the server. If an ID does not exist,
+// returns -1.
+// Can return the following error(s):
+// - LocalPathError
+func FetchOldId(localPath string) (id int, err error) {
+
+	id = -1
+	fullPath := path.Join(localPath, "id.txt")
+
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		// If the ID file does not exist, create one.
+		f, err := os.Create(fullPath)
+		if err != nil {
+			return id, LocalPathError(fullPath)
+		}
+		f.Close()
+		return id, nil
+	} else {
+		// Otherwise, read the id from the file.
+		f, err := os.Open(fullPath)
+		if err != nil {
+			return id, LocalPathError(fullPath)
+		}
+		defer f.Close()
+
+		idBuf := make([]byte, 64)
+		n, err := f.Read(idBuf)
+		if err != nil {
+			return id, LocalPathError(fullPath)
+		}
+		id, err := strconv.Atoi(string(idBuf[:n]))
+		if err != nil {
+			return id, LocalPathError(fullPath)
+		}
+		return id, nil
+	}
+
+}
+
+// Stores given contents to a file on disk.
+// Can return the following error(s):
+// - LocalPathError
+func StoreFileOnDisk(contents []byte, localPath, fname string) (err error) {
+
+	fullPath := path.Join(localPath, fname+".dfs")
+
+	err = CreateFile(fullPath)
+	if err != nil {
+		return LocalPathError(fullPath)
+	}
+
+	f, err := os.OpenFile(fullPath, os.O_WRONLY, os.ModeAppend)
+	if err != nil {
+		return LocalPathError(fullPath)
+	}
+	defer f.Close()
+
+	_, err = f.Write(contents)
+	if err != nil {
+		return LocalPathError(fullPath)
+	}
+	f.Sync()
+
+	return nil
+
+}
+
+// Writes a chunk to a file on disk.
+func WriteChunk(localPath, fname string, chunk *Chunk, chunkNum uint8) (err error) {
+
+	fullPath := path.Join(localPath, fname+".dfs")
+
+	err = CreateFile(fullPath)
+	if err != nil {
+		return LocalPathError(fullPath)
+	}
+
+	f, err := os.OpenFile(fullPath, os.O_WRONLY, os.ModeAppend)
+	if err != nil {
+		return LocalPathError(fullPath)
+	}
+	defer f.Close()
+
+	_, err = f.WriteAt(chunk[:], int64(chunkNum))
+	if err != nil {
+		return LocalPathError(fullPath)
+	}
+	f.Sync()
+
 	return nil
 
 }

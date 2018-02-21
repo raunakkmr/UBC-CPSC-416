@@ -17,9 +17,15 @@ import "fmt"
 import "os"
 
 func main() {
-	serverAddr := "127.0.0.1:8080"
-	localIP := "127.0.0.1"
-	localPath := "/tmp/dfs-dev/"
+
+	// serverAddr := "127.0.0.1:8080"
+	// localIP := "127.0.0.1"
+
+	args := os.Args[1:]
+	localIP := args[0]
+	serverAddr := args[1]
+
+	localPath := "./dfs-dev"
 
 	// Connect to DFS.
 	dfs, err := dfslib.MountDFS(serverAddr, localIP, localPath)
